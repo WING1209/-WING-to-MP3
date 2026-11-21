@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>【WING】- to MP3 - Ver1.0</title>
+  <!-- ブラウザ上でMP3エンコードを行うためのライブラリ -->
+  <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
   <style>
     :root {
       --bg-dark: #070913;
@@ -104,6 +106,7 @@
       box-shadow: 0 0 18px rgba(0, 243, 255, 0.18), inset 0 0 18px rgba(176, 38, 255, 0.12);
     }
 
+    .upload-box.dragover,
     .upload-box:active {
       transform: scale(0.98);
       background-color: rgba(0, 243, 255, 0.1);
@@ -314,21 +317,21 @@
   <header>
     <div class="cyber-badge">44.1kHz // STEREO // MP3</div>
     <h1>【WING】- to MP3 - Ver1.0</h1>
-    <p>音源・MP4から音声だけを抽出＆変換</p>
+    <p>MP3・音源・MP4から音声を再エンコード＆変換</p>
   </header>
 
   <div class="container">
     <!-- 大型ファイル選択エリア -->
-    <label class="upload-box" id="uploadBox">
+    <label class="upload-box" id="uploadBox" for="fileInput">
       <span class="upload-icon">⚡</span>
       <div class="upload-text">ファイルを選択する</div>
-      <div class="upload-subtext">MP4 / MOV / WAV / M4A / AAC / FLAC / OGG<br>端末内ローカル処理（通信量ゼロ・安全）</div>
-      <input type="file" id="fileInput" accept="audio/*,video/*,.mp4,.mov,.m4a,.wav,.flac,.ogg,.aac,.wma">
+      <div class="upload-subtext">MP3 / MP4 / MOV / WAV / M4A / AAC / FLAC / OGG<br>端末内ローカル処理（通信量ゼロ・安全）</div>
+      <input type="file" id="fileInput" accept=".mp3,audio/mpeg,audio/*,video/*,.mp4,.mov,.m4a,.wav,.flac,.ogg,.aac,.wma">
     </label>
 
     <!-- 選択されたファイル情報 -->
     <div class="file-info" id="fileInfo">
-      <div class="file-name" id="fileName">sample.mp4</div>
+      <div class="file-name" id="fileName">sample.mp3</div>
       <div class="file-size" id="fileSize">0 MB</div>
     </div>
 
@@ -336,9 +339,9 @@
     <div class="setting-box">
       <span class="setting-label">OUTPUT BITRATE（出力音質）</span>
       <div class="bitrate-group" id="bitrateGroup">
-        <button type="button" class="bitrate-btn" data-bitrate="128k">128k</button>
-        <button type="button" class="bitrate-btn active" data-bitrate="192k">192k<br><span style="font-size:0.7rem;">STD</span></button>
-        <button type="button" class="bitrate-btn" data-bitrate="320k">320k<br><span style="font-size:0.7rem;">HIGH</span></button>
+        <button type="button" class="bitrate-btn" data-bitrate="128">128k</button>
+        <button type="button" class="bitrate-btn active" data-bitrate="192">192k<br><span style="font-size:0.7rem;">STD</span></button>
+        <button type="button" class="bitrate-btn" data-bitrate="320">320k<br><span style="font-size:0.7rem;">HIGH</span></button>
       </div>
     </div>
 
@@ -353,5 +356,220 @@
       </div>
     </div>
 
-    <!-- 大型ダウンロードボタン -->
-    <a class="download-
+    <!-- 大型 ダウンロードボタン -->
+    <a class="download-btn" id="downloadBtn" href="#" download="output.mp3">MP3をダウンロードする</a>
+  </div>
+
+  <footer>【WING】- to MP3 - Ver1.0 // LOCAL AUDIO ENGINE</footer>
+
+  <script>
+    const uploadBox = document.getElementById('uploadBox');
+    const fileInput = document.getElementById('fileInput');
+    const fileInfo = document.getElementById('fileInfo');
+    const fileNameEl = document.getElementById('fileName');
+    const fileSizeEl = document.getElementById('fileSize');
+    const bitrateButtons = document.querySelectorAll('.bitrate-btn');
+    const convertBtn = document.getElementById('convertBtn');
+    const statusBox = document.getElementById('statusBox');
+    const statusText = document.getElementById('statusText');
+    const progressBar = document.getElementById('progressBar');
+    const downloadBtn = document.getElementById('downloadBtn');
+
+    let selectedFile = null;
+    let selectedBitrate = 192;
+    let currentObjectUrl = null;
+
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    }
+
+    function floatTo16BitPCM(float32Array) {
+      const int16Array = new Int16Array(float32Array.length);
+      for (let i = 0; i < float32Array.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32Array[i]));
+        int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+      return int16Array;
+    }
+
+    function updateStatus(text, percent) {
+      statusBox.style.display = 'flex';
+      statusText.textContent = text;
+      progressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+    }
+
+    function isMp3File(file) {
+      if (!file) return false;
+      const lowerName = file.name.toLowerCase();
+      return lowerName.endsWith('.mp3') || file.type === 'audio/mpeg' || file.type === 'audio/mp3';
+    }
+
+    function buildOutputFileName(originalName) {
+      const baseName = originalName.replace(/\.[^/.]+$/, '') || 'converted';
+      if (/\.mp3$/i.test(originalName) || originalName.toLowerCase().endsWith('.mp3')) {
+        return `${baseName}_${selectedBitrate}k.mp3`;
+      }
+      return `${baseName}.mp3`;
+    }
+
+    function handleFileSelect(file) {
+      if (!file) return;
+      selectedFile = file;
+      fileNameEl.textContent = file.name;
+      fileSizeEl.textContent = formatFileSize(file.size);
+      fileInfo.style.display = 'flex';
+      convertBtn.disabled = false;
+
+      downloadBtn.style.display = 'none';
+      if (currentObjectUrl) {
+        URL.revokeObjectURL(currentObjectUrl);
+        currentObjectUrl = null;
+      }
+
+      if (isMp3File(file)) {
+        updateStatus('MP3ファイルを検出しました（再エンコードでビットレート変更・統一が可能）', 0);
+      } else {
+        statusBox.style.display = 'none';
+        progressBar.style.width = '0%';
+      }
+    }
+
+    fileInput.addEventListener('change', (e) => {
+      handleFileSelect(e.target.files[0]);
+    });
+
+    ['dragenter', 'dragover'].forEach((eventName) => {
+      uploadBox.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        uploadBox.classList.add('dragover');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach((eventName) => {
+      uploadBox.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        uploadBox.classList.remove('dragover');
+      });
+    });
+
+    uploadBox.addEventListener('drop', (e) => {
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        fileInput.files = e.dataTransfer.files;
+        handleFileSelect(file);
+      }
+    });
+
+    bitrateButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        bitrateButtons.forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedBitrate = parseInt(btn.dataset.bitrate, 10) || 192;
+      });
+    });
+
+    convertBtn.addEventListener('click', async () => {
+      if (!selectedFile) return;
+
+      if (typeof lamejs === 'undefined' || !lamejs.Mp3Encoder) {
+        updateStatus('ERROR: MP3エンコーダを読み込めませんでした。ネットワーク接続を確認してください。', 0);
+        return;
+      }
+
+      convertBtn.disabled = true;
+      downloadBtn.style.display = 'none';
+      if (currentObjectUrl) {
+        URL.revokeObjectURL(currentObjectUrl);
+        currentObjectUrl = null;
+      }
+
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioContextClass();
+
+      try {
+        updateStatus('音声データを読み込み中...', 12);
+        const arrayBuffer = await selectedFile.arrayBuffer();
+
+        updateStatus('音声トラックをデコード中...', 30);
+        const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+        const targetSampleRate = 44100;
+        const channels = decodedBuffer.numberOfChannels >= 2 ? 2 : 1;
+        let renderBuffer = decodedBuffer;
+
+        if (decodedBuffer.sampleRate !== targetSampleRate) {
+          updateStatus(`サンプリングレートを ${targetSampleRate}Hz に調整中...`, 45);
+          const offlineCtx = new OfflineAudioContext(
+            channels,
+            Math.ceil(decodedBuffer.duration * targetSampleRate),
+            targetSampleRate
+          );
+          const source = offlineCtx.createBufferSource();
+          source.buffer = decodedBuffer;
+          source.connect(offlineCtx.destination);
+          source.start(0);
+          renderBuffer = await offlineCtx.startRendering();
+        }
+
+        updateStatus(`MP3エンコード中 (${selectedBitrate}kbps)...`, 55);
+
+        const leftSamples = floatTo16BitPCM(renderBuffer.getChannelData(0));
+        const rightSamples = channels === 2
+          ? floatTo16BitPCM(renderBuffer.getChannelData(1))
+          : null;
+
+        const encoder = new lamejs.Mp3Encoder(channels, targetSampleRate, selectedBitrate);
+        const mp3Data = [];
+        const blockSize = 1152;
+        const totalSamples = leftSamples.length;
+
+        for (let i = 0; i < totalSamples; i += blockSize) {
+          const leftChunk = leftSamples.subarray(i, i + blockSize);
+          let mp3buf;
+          if (channels === 2) {
+            const rightChunk = rightSamples.subarray(i, i + blockSize);
+            mp3buf = encoder.encodeBuffer(leftChunk, rightChunk);
+          } else {
+            mp3buf = encoder.encodeBuffer(leftChunk);
+          }
+          if (mp3buf.length > 0) {
+            mp3Data.push(new Uint8Array(mp3buf));
+          }
+
+          if (i % (blockSize * 40) === 0) {
+            const encodeProgress = 55 + Math.floor((i / totalSamples) * 40);
+            updateStatus(`MP3エンコード中... ${encodeProgress}%`, encodeProgress);
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+        }
+
+        const flushBuf = encoder.flush();
+        if (flushBuf.length > 0) {
+          mp3Data.push(new Uint8Array(flushBuf));
+        }
+
+        const mp3Blob = new Blob(mp3Data, { type: 'audio/mpeg' });
+        currentObjectUrl = URL.createObjectURL(mp3Blob);
+
+        const outputName = buildOutputFileName(selectedFile.name);
+        downloadBtn.href = currentObjectUrl;
+        downloadBtn.download = outputName;
+        downloadBtn.textContent = `MP3をダウンロード（${formatFileSize(mp3Blob.size)}）`;
+        downloadBtn.style.display = 'block';
+
+        updateStatus(`変換完了（${outputName}）！ダウンロードボタンを押してください。`, 100);
+      } catch (err) {
+        console.error(err);
+        updateStatus('変換に失敗しました。非対応の音声コーデックまたは破損ファイルの可能性があります。', 0);
+      } finally {
+        convertBtn.disabled = false;
+        if (audioCtx.state !== 'closed') {
+          await audioCtx.close().catch(() => {});
+        }
+      }
+    });
+  </script>
+</body>
+</html>
