@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>【WING】- to MP3 - Ver1.0</title>
+  <style>
+    :root {
+      --bg-dark: #070913;
+      --bg-gradient: radial-gradient(circle at 50% 0%, #1a103c 0%, #090c1a 55%, #05060d 100%);
+      --card-bg: rgba(16, 22, 46, 0.78);
+      --neon-cyan: #00f3ff;
+      --neon-pink: #ff007f;
+      --neon-purple: #b026ff;
+      --neon-green: #00ff9d;
+      --neon-yellow: #ffe600;
+      --text-main: #f4f7ff;
+      --text-sub: #9aa7cc;
+      --border-glow: rgba(0, 243, 255, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image:
+        linear-gradient(rgba(0, 243, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 0, 127, 0.04) 1px, transparent 1px),
+        var(--bg-gradient);
+      background-size: 28px 28px, 28px 28px, 100% 100%;
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      padding: 18px 16px 28px;
+    }
+
+    /* ヘッダー（タイトル表示） */
+    header {
+      text-align: center;
+      padding: 14px 10px 22px;
+      border-bottom: 1px solid rgba(0, 243, 255, 0.25);
+      margin-bottom: 20px;
+      box-shadow: 0 6px 24px -12px rgba(0, 243, 255, 0.45);
+    }
+
+    .cyber-badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      color: var(--neon-green);
+      background: rgba(0, 255, 157, 0.1);
+      border: 1px solid rgba(0, 255, 157, 0.45);
+      padding: 3px 10px;
+      border-radius: 999px;
+      margin-bottom: 8px;
+      text-shadow: 0 0 8px rgba(0, 255, 157, 0.6);
+    }
+
+    header h1 {
+      font-size: 1.45rem;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple), var(--neon-pink));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 10px rgba(0, 243, 255, 0.35));
+      line-height: 1.3;
+    }
+
+    header p {
+      font-size: 0.85rem;
+      color: var(--text-sub);
+      margin-top: 8px;
+      font-weight: 600;
+    }
+
+    .container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      max-width: 520px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* 大型ファイル選択エリア */
+    .upload-box {
+      background: var(--card-bg);
+      border: 2px dashed var(--neon-cyan);
+      border-radius: 20px;
+      padding: 34px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.2s, background-color 0.2s;
+      box-shadow: 0 0 18px rgba(0, 243, 255, 0.18), inset 0 0 18px rgba(176, 38, 255, 0.12);
+    }
+
+    .upload-box:active {
+      transform: scale(0.98);
+      background-color: rgba(0, 243, 255, 0.1);
+      box-shadow: 0 0 28px rgba(0, 243, 255, 0.45);
+    }
+
+    .upload-icon {
+      font-size: 2.8rem;
+      margin-bottom: 10px;
+      display: block;
+      filter: drop-shadow(0 0 10px rgba(255, 0, 127, 0.7));
+    }
+
+    .upload-text {
+      font-size: 1.2rem;
+      font-weight: 800;
+      color: var(--neon-cyan);
+      text-shadow: 0 0 10px rgba(0, 243, 255, 0.45);
+    }
+
+    .upload-subtext {
+      font-size: 0.8rem;
+      color: var(--text-sub);
+      margin-top: 8px;
+      line-height: 1.5;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    /* 選択ファイル表示 */
+    .file-info {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 16px 18px;
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid rgba(255, 0, 127, 0.5);
+      box-shadow: 0 0 16px rgba(255, 0, 127, 0.2);
+    }
+
+    .file-name {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #ffffff;
+      word-break: break-all;
+      padding-right: 12px;
+    }
+
+    .file-size {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--neon-pink);
+      white-space: nowrap;
+    }
+
+    /* ビットレート選択（大きめボタン） */
+    .setting-box {
+      background: var(--card-bg);
+      border-radius: 18px;
+      padding: 16px;
+      border: 1px solid var(--border-glow);
+    }
+
+    .setting-label {
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--neon-cyan);
+      margin-bottom: 12px;
+      display: block;
+      letter-spacing: 0.04em;
+    }
+
+    .bitrate-group {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .bitrate-btn {
+      min-height: 54px;
+      padding: 10px 6px;
+      background: rgba(10, 15, 34, 0.9);
+      color: var(--text-main);
+      border: 1.5px solid rgba(154, 167, 204, 0.35);
+      border-radius: 14px;
+      font-size: 0.92rem;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .bitrate-btn:active {
+      transform: scale(0.96);
+    }
+
+    .bitrate-btn.active {
+      background: linear-gradient(135deg, rgba(0, 243, 255, 0.25), rgba(176, 38, 255, 0.28));
+      border-color: var(--neon-cyan);
+      color: #ffffff;
+      box-shadow: 0 0 16px rgba(0, 243, 255, 0.45);
+      text-shadow: 0 0 8px rgba(0, 243, 255, 0.8);
+    }
+
+    /* 大型 変換実行ボタン */
+    .action-btn {
+      width: 100%;
+      min-height: 68px;
+      padding: 20px;
+      border: none;
+      border-radius: 18px;
+      background: linear-gradient(90deg, var(--neon-cyan) 0%, var(--neon-purple) 55%, var(--neon-pink) 100%);
+      color: #ffffff;
+      font-size: 1.2rem;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      text-shadow: 0 1px 8px rgba(0, 0, 0, 0.75);
+      box-shadow: 0 0 24px rgba(255, 0, 127, 0.4), 0 0 18px rgba(0, 243, 255, 0.35);
+      transition: transform 0.12s, box-shadow 0.2s, opacity 0.2s;
+    }
+
+    .action-btn:disabled {
+      background: linear-gradient(90deg, #252b42, #1e2236);
+      color: #6f7899;
+      text-shadow: none;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
+    .action-btn:not(:disabled):active {
+      transform: scale(0.97);
+      box-shadow: 0 0 34px rgba(0, 243, 255, 0.7);
+    }
+
+    /* 進行状況 */
+    .status-box {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 18px;
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      border: 1px solid rgba(0, 255, 157, 0.4);
+      box-shadow: 0 0 18px rgba(0, 255, 157, 0.15);
+    }
+
+    .status-text {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--neon-green);
+      text-align: center;
+      text-shadow: 0 0 8px rgba(0, 255, 157, 0.4);
+    }
+
+    .progress-bar-bg {
+      width: 100%;
+      height: 12px;
+      background-color: rgba(8, 12, 26, 0.95);
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid rgba(0, 243, 255, 0.25);
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--neon-green), var(--neon-cyan), var(--neon-pink));
+      box-shadow: 0 0 12px var(--neon-cyan);
+      transition: width 0.2s ease;
+    }
+
+    /* 大型 ダウンロードボタン */
+    .download-btn {
+      display: none;
+      width: 100%;
+      min-height: 70px;
+      padding: 20px;
+      border-radius: 18px;
+      background: linear-gradient(90deg, var(--neon-green), #00d4ff);
+      color: #050814;
+      text-align: center;
+      text-decoration: none;
+      font-size: 1.2rem;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      box-shadow: 0 0 28px rgba(0, 255, 157, 0.55);
+      transition: transform 0.12s;
+    }
+
+    .download-btn:active {
+      transform: scale(0.97);
+    }
+
+    footer {
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-sub);
+      padding-top: 24px;
+      letter-spacing: 0.05em;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="cyber-badge">44.1kHz // STEREO // MP3</div>
+    <h1>【WING】- to MP3 - Ver1.0</h1>
+    <p>音源・MP4から音声だけを抽出＆変換</p>
+  </header>
+
+  <div class="container">
+    <!-- 大型ファイル選択エリア -->
+    <label class="upload-box" id="uploadBox">
+      <span class="upload-icon">⚡</span>
+      <div class="upload-text">ファイルを選択する</div>
+      <div class="upload-subtext">MP4 / MOV / WAV / M4A / AAC / FLAC / OGG<br>端末内ローカル処理（通信量ゼロ・安全）</div>
+      <input type="file" id="fileInput" accept="audio/*,video/*,.mp4,.mov,.m4a,.wav,.flac,.ogg,.aac,.wma">
+    </label>
+
+    <!-- 選択されたファイル情報 -->
+    <div class="file-info" id="fileInfo">
+      <div class="file-name" id="fileName">sample.mp4</div>
+      <div class="file-size" id="fileSize">0 MB</div>
+    </div>
+
+    <!-- ビットレート設定 -->
+    <div class="setting-box">
+      <span class="setting-label">OUTPUT BITRATE（出力音質）</span>
+      <div class="bitrate-group" id="bitrateGroup">
+        <button type="button" class="bitrate-btn" data-bitrate="128k">128k</button>
+        <button type="button" class="bitrate-btn active" data-bitrate="192k">192k<br><span style="font-size:0.7rem;">STD</span></button>
+        <button type="button" class="bitrate-btn" data-bitrate="320k">320k<br><span style="font-size:0.7rem;">HIGH</span></button>
+      </div>
+    </div>
+
+    <!-- 大型変換ボタン -->
+    <button type="button" class="action-btn" id="convertBtn" disabled>MP3に変換する</button>
+
+    <!-- ステータス表示 -->
+    <div class="status-box" id="statusBox">
+      <div class="status-text" id="statusText">STANDBY...</div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progressBar"></div>
+      </div>
+    </div>
+
+    <!-- 大型ダウンロードボタン -->
+    <a class="download-
