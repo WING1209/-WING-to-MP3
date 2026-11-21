@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>【WING】- to MP3 - Ver1.1</title>
+  <title>【WING】- to MP3 - Ver1.0</title>
   <!-- ブラウザ上でMP3エンコードを行うためのライブラリ -->
   <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
   <style>
@@ -317,7 +317,7 @@
   <header>
     <div class="cyber-badge">44.1kHz // STEREO // MP3</div>
     <h1>【WING】- to MP3 - Ver1.0</h1>
-    <p>MP3・音源・MP4から音声を再エンコード＆変換</p>
+    <p>44.1kHz / ステレオ MP3へ統一変換</p>
   </header>
 
   <div class="container">
@@ -325,7 +325,7 @@
     <label class="upload-box" id="uploadBox" for="fileInput">
       <span class="upload-icon">⚡</span>
       <div class="upload-text">ファイルを選択する</div>
-      <div class="upload-subtext">MP3 / MP4 / MOV / WAV / M4A / AAC / FLAC / OGG<br>端末内ローカル処理（通信量ゼロ・安全）</div>
+      <div class="upload-subtext">MP3 / MP4 / MOV / WAV / M4A / AAC / FLAC / OGG<br>常時 44.1kHz / ステレオ MP3 に変換</div>
       <input type="file" id="fileInput" accept=".mp3,audio/mpeg,audio/*,video/*,.mp4,.mov,.m4a,.wav,.flac,.ogg,.aac,.wma">
     </label>
 
@@ -337,7 +337,7 @@
 
     <!-- ビットレート設定 -->
     <div class="setting-box">
-      <span class="setting-label">OUTPUT BITRATE（出力音質）</span>
+      <span class="setting-label">OUTPUT BITRATE（出力音質 / 44.1kHz Stereo）</span>
       <div class="bitrate-group" id="bitrateGroup">
         <button type="button" class="bitrate-btn" data-bitrate="128">128k</button>
         <button type="button" class="bitrate-btn active" data-bitrate="192">192k<br><span style="font-size:0.7rem;">STD</span></button>
@@ -360,7 +360,7 @@
     <a class="download-btn" id="downloadBtn" href="#" download="output.mp3">MP3をダウンロードする</a>
   </div>
 
-  <footer>【WING】- to MP3 - Ver1.0 // LOCAL AUDIO ENGINE</footer>
+  <footer>【WING】- to MP3 - Ver1.0 // 44.1kHz STEREO ENGINE</footer>
 
   <script>
     const uploadBox = document.getElementById('uploadBox');
@@ -408,10 +408,34 @@
 
     function buildOutputFileName(originalName) {
       const baseName = originalName.replace(/\.[^/.]+$/, '') || 'converted';
-      if (/\.mp3$/i.test(originalName) || originalName.toLowerCase().endsWith('.mp3')) {
-        return `${baseName}_${selectedBitrate}k.mp3`;
+      if (isMp3File(selectedFile)) {
+        return `${baseName}_44100_stereo_${selectedBitrate}k.mp3`;
       }
       return `${baseName}.mp3`;
+    }
+
+    // 任意チャンネル・任意サンプルレートのAudioBufferを 44100Hz / 2ch ステレオに変換
+    async function renderTo44100Stereo(decodedBuffer) {
+      const targetSampleRate = 44100;
+      const targetChannels = 2;
+      const frameCount = Math.ceil(decodedBuffer.duration * targetSampleRate);
+      const offlineCtx = new OfflineAudioContext(targetChannels, frameCount, targetSampleRate);
+
+      // 入力が1ch（モノラル）の場合も2chに複製してステレオ化
+      let sourceBuffer = decodedBuffer;
+      if (decodedBuffer.numberOfChannels === 1) {
+        const stereoInput = offlineCtx.createBuffer(2, decodedBuffer.length, decodedBuffer.sampleRate);
+        const monoData = decodedBuffer.getChannelData(0);
+        stereoInput.copyToChannel(monoData, 0);
+        stereoInput.copyToChannel(monoData, 1);
+        sourceBuffer = stereoInput;
+      }
+
+      const source = offlineCtx.createBufferSource();
+      source.buffer = sourceBuffer;
+      source.connect(offlineCtx.destination);
+      source.start(0);
+      return await offlineCtx.startRendering();
     }
 
     function handleFileSelect(file) {
@@ -428,12 +452,8 @@
         currentObjectUrl = null;
       }
 
-      if (isMp3File(file)) {
-        updateStatus('MP3ファイルを検出しました（再エンコードでビットレート変更・統一が可能）', 0);
-      } else {
-        statusBox.style.display = 'none';
-        progressBar.style.width = '0%';
-      }
+      statusBox.style.display = 'none';
+      progressBar.style.width = '0%';
     }
 
     fileInput.addEventListener('change', (e) => {
@@ -492,33 +512,18 @@
         updateStatus('音声データを読み込み中...', 12);
         const arrayBuffer = await selectedFile.arrayBuffer();
 
-        updateStatus('音声トラックをデコード中...', 30);
+        updateStatus('音声トラックをデコード中...', 28);
         const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
 
+        updateStatus('44100Hz / ステレオに変換中...', 45);
+        const stereoBuffer = await renderTo44100Stereo(decodedBuffer);
+
+        updateStatus(`MP3エンコード中 (44100Hz / Stereo / ${selectedBitrate}kbps)...`, 58);
+
         const targetSampleRate = 44100;
-        const channels = decodedBuffer.numberOfChannels >= 2 ? 2 : 1;
-        let renderBuffer = decodedBuffer;
-
-        if (decodedBuffer.sampleRate !== targetSampleRate) {
-          updateStatus(`サンプリングレートを ${targetSampleRate}Hz に調整中...`, 45);
-          const offlineCtx = new OfflineAudioContext(
-            channels,
-            Math.ceil(decodedBuffer.duration * targetSampleRate),
-            targetSampleRate
-          );
-          const source = offlineCtx.createBufferSource();
-          source.buffer = decodedBuffer;
-          source.connect(offlineCtx.destination);
-          source.start(0);
-          renderBuffer = await offlineCtx.startRendering();
-        }
-
-        updateStatus(`MP3エンコード中 (${selectedBitrate}kbps)...`, 55);
-
-        const leftSamples = floatTo16BitPCM(renderBuffer.getChannelData(0));
-        const rightSamples = channels === 2
-          ? floatTo16BitPCM(renderBuffer.getChannelData(1))
-          : null;
+        const channels = 2;
+        const leftSamples = floatTo16BitPCM(stereoBuffer.getChannelData(0));
+        const rightSamples = floatTo16BitPCM(stereoBuffer.getChannelData(1));
 
         const encoder = new lamejs.Mp3Encoder(channels, targetSampleRate, selectedBitrate);
         const mp3Data = [];
@@ -527,19 +532,15 @@
 
         for (let i = 0; i < totalSamples; i += blockSize) {
           const leftChunk = leftSamples.subarray(i, i + blockSize);
-          let mp3buf;
-          if (channels === 2) {
-            const rightChunk = rightSamples.subarray(i, i + blockSize);
-            mp3buf = encoder.encodeBuffer(leftChunk, rightChunk);
-          } else {
-            mp3buf = encoder.encodeBuffer(leftChunk);
-          }
+          const rightChunk = rightSamples.subarray(i, i + blockSize);
+          const mp3buf = encoder.encodeBuffer(leftChunk, rightChunk);
+
           if (mp3buf.length > 0) {
             mp3Data.push(new Uint8Array(mp3buf));
           }
 
           if (i % (blockSize * 40) === 0) {
-            const encodeProgress = 55 + Math.floor((i / totalSamples) * 40);
+            const encodeProgress = 58 + Math.floor((i / totalSamples) * 38);
             updateStatus(`MP3エンコード中... ${encodeProgress}%`, encodeProgress);
             await new Promise((resolve) => setTimeout(resolve, 0));
           }
@@ -559,7 +560,7 @@
         downloadBtn.textContent = `MP3をダウンロード（${formatFileSize(mp3Blob.size)}）`;
         downloadBtn.style.display = 'block';
 
-        updateStatus(`変換完了（${outputName}）！ダウンロードボタンを押してください。`, 100);
+        updateStatus(`変換完了（44100Hz / Stereo / ${outputName}）`, 100);
       } catch (err) {
         console.error(err);
         updateStatus('変換に失敗しました。非対応の音声コーデックまたは破損ファイルの可能性があります。', 0);
